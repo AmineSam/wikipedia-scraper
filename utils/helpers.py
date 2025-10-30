@@ -17,45 +17,57 @@ def _tqdm(iterable, **kwargs):
     return iterable
 
 
-import re
 
-IPA_CHARS = "ˈˌɑɐɒæɓʙβɔɕçɖðʤɘəɚɛɜɝɞɟɠɢʛɣħɦɧɪɨʝɭɬɫʟɱɲŋɳɴøɵʘɸθœɶɺɻʀʂʃᵻʉʊʋⱱʍχʎʏʒʑʐʔʕʢʡːˑ̩̯̃̈"
-# “token” here means a short 1–3 char piece common in IPA strings (a, ʁ., k, ə etc.)
-IPA_TOKEN = rf"[A-Za-zÀ-ÖØ-öø-ÿ{IPA_CHARS}]{{1,3}}(?:\s*[.\u00B7]\s*)?"
 
 def _sanitize_text(raw: str) -> str:
-    """Remove refs, IPA/phonetics (even dangling), audio cues, then normalize spacing/punctuation."""
+    """Clean Wikipedia intro text by removing references, phonetics, redirections, and extra spaces."""
     text = raw
 
-    # 1) Remove Wikipedia refs like [1], [note], etc.
+    # Remove reference brackets like [1], [citation needed]
     text = re.sub(r"\[[^\]]*\]", "", text)
-
-    # 2) Remove common editorial tags
     text = re.sub(r"\((?:citation needed|clarification needed|who\?)\)", "", text, flags=re.IGNORECASE)
 
-    # 3) Remove explicit “pronunciation/audio” words & symbols in FR/NL/EN
-    text = re.sub(r"\b(Écouter|Ecouter|Listen|Audio|Pronounced|Pronunciation|prononcé|prononciation|uitspraak)\b",
-                  "", text, flags=re.IGNORECASE)
+    # Remove IPA or phonetic sequences between /.../, (...), or [...]
+    text = re.sub(
+        r"[\/\[\(]\s*[ˈˌʔɡθðʃʒŋɪɛæɑɔʊɒəɚɝɾʌɜ̃ɲɾɫ̃ːa-zA-ZÀ-ž0-9\s\.\-ʼ'ˈˌʰʲʷʲ̩̯]+\s*[\)\/\]]",
+        "",
+        text,
+    )
+
+    # Remove sequences like "n i. k. l a s a ʁ. k. z i" (broken-down IPA letters)
+    text = re.sub(r"(?:[a-zA-Zʁɡɪʊɔɐɛøœðʃʒŋɲɾɫ̃ː]\.\s*){2,}", "", text)
+
+    # Remove textual phonetic hints (e.g., "van BYOO-rən", "bew-KAN-ən", "mən-ROH")
+    text = re.sub(
+        r"\b(?:van|bew|mən|BYOO|ROH|KAN|rən|bjuː|KOOL|ij|mən|roh|van)\b[-–—]?[A-Z\-a-z]+\b",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Remove pronunciation words in different languages (FR, NL, EN)
+    text = re.sub(
+        r"\b(Écouter|Prononciation|Prononcé|Pronounced|Pronunciation|Uitspraak|uitspraak|écouter)\b",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Remove redirection or disambiguation messages (especially in French)
+    text = re.sub(
+        r"(redirige(?:nt)? ici|homonymes|article concerne|voir article|redirects? here)",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Remove leftover symbols and icons
     text = re.sub(r"[ⓘ➤▶►🔊🔈🔉]", "", text)
 
-    # 4) Remove slashed phonetics: / ... /
-    text = re.sub(r"/[^/\n]{2,}/", "", text)
-
-    # 5) Remove parenthetical blocks that look like IPA sequences:
-    #    (a ʁ. k. z i) or ( n i. k ɔ. l a s ) etc. (≥ 3 short IPA tokens)
-    text = re.sub(rf"\(\s*(?:{IPA_TOKEN}\s*){{3,}}\)", "", text)
-
-    # 6) Remove dangling IPA sequences that end with ')', without an opening '(':
-    #    e.g. "ʒ a k ʃ i ʁ a k )" or "ʃ a ʁ l d ə ɡ o l )"
-    text = re.sub(rf"(?:\s*(?:{IPA_TOKEN}))+?\s*\)", "", text)
-
-    # 7) Remove empty/near-empty parentheses left behind: () or ( )
-    text = re.sub(r"\(\s*\)", "", text)
-
-    # 8) Normalize spaces around punctuation and collapse whitespace
+    # Clean punctuation and normalize spaces
+    text = re.sub(r"\s*[;/,:]\s*", " ", text)
     text = text.replace("\xa0", " ")
-    text = re.sub(r"\s*([,;:])\s*", r" \1 ", text)   # keep a single space around , ; :
-    text = re.sub(r"\s*([.])\s*", r"\1 ", text)      # sentence periods: stick to previous word, space after
     text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+([,.;:])", r"\1", text)
 
     return text
