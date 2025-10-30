@@ -22,7 +22,7 @@ The project structure is designed for scalability, modularity, and clarity.
 ![alt text](<images/ChatGPT Image Oct 30, 2025, 10_01_49 AM.png?>)
 ---
 
-## 🧩 Project Structure  
+## Project Structure  
 
 ```
 wikipedia-scraper/
