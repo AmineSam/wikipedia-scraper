@@ -19,7 +19,7 @@ A robust Python scraper to retrieve world leaders’ data via the Country-Leader
 
 The project structure is designed for scalability, modularity, and clarity.
 
-![alt text](<ChatGPT Image Oct 30, 2025, 10_01_49 AM.png>)
+![alt text](<images/ChatGPT Image Oct 30, 2025, 10_01_49 AM.png?>)
 ---
 
 ## 🧩 Project Structure  
@@ -31,10 +31,12 @@ wikipedia-scraper/
 ├── src/
 │   ├── __init__.py
 │   ├── leaders_scraper.py         # Main WikipediaScraper class
-│   └── utils/
+├── utils/
 │       ├── __init__.py
-│       └── helpers.py             # Helper utilities (regex, tqdm wrappers, etc.)
-│
+│       └── helpers.py             # Helper utilities (regex, tqdm wrappers)
+├── images/
+│       ├── 
+│       └── 
 ├── leaders_data.json              # Output: Json leader data
 ├── leaders_data.csv               # Output: CSV version
 └── README.md
@@ -72,7 +74,7 @@ python main.py
 
 ### Example output:
 
-![alt text](output1.PNG)
+![alt text](images/output1.PNG)
 
 ### After completion:
 - A `leaders_data.json` file is created with full leader profiles.
@@ -84,7 +86,7 @@ python main.py
 
 ### Example Console Output:
 
-![alt text](output2.PNG)
+![alt text](images/output2.PNG)
 
 ### Example JSON Structure:
 ```json
