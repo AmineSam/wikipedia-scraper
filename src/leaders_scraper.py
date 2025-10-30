@@ -43,16 +43,29 @@ class WikipediaScraper:
 
             soup = BeautifulSoup(resp.text, "html.parser")
 
+            banned_phrases = ["redirigent ici", "homonymes", "article concerne", "redirige ici"]
+
             # Iterate through <p> tags and pick the first valid paragraph
             for p in soup.find_all("p"):
+                
                 text = p.get_text(" ", strip=True)
-                if len(text) > 40 and not any(
+
+                # Skip French warning or redirect paragraphs
+                if p.find("strong", class_="bandeau-titre"):
+                    continue
+
+                if any(phrase.lower() in text.lower() for phrase in banned_phrases):
+                    continue
+            
+                if len(text) > 100 and not any(
                     x in text.lower() for x in ["disambiguation", "refer to"]
                 ):
                     return _sanitize_text(text)
         except Exception:
             pass
         return None
+    
+    
 
     def get_leaders(self, country: str):
         """Fetch leaders for a given country and add their Wikipedia intros."""
