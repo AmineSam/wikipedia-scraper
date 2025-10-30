@@ -6,8 +6,8 @@ __pycache__/
 *.pyc
 
 # Data outputs
-leaders.json
-leaders.csv
+# leaders.json
+# leaders.csv
 
 # Jupyter checkpoints
 .ipynb_checkpoints/

@@ -1,195 +1,109 @@
-import json
-import re
-import pandas as pd
-import requests
+import requests, json, time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
-from typing import Dict, List, Any, Optional, Iterable
-
-
-def _has_tqdm():
-    try:
-        import tqdm  # noqa: F401
-        return True
-    except Exception:
-        return False
-
-
-def _tqdm(iterable: Iterable, **kwargs):
-    if _has_tqdm():
-        from tqdm import tqdm
-        return tqdm(iterable, **kwargs)
-    return iterable
+from utils.helpers import _tqdm, _sanitize_text
 
 
 class WikipediaScraper:
+    """Scraper that retrieves country leaders and extracts Wikipedia intros."""
+
     def __init__(self):
         self.base_url = "https://country-leaders.onrender.com"
         self.country_endpoint = "/countries"
         self.leaders_endpoint = "/leaders"
         self.cookies_endpoint = "/cookie"
-        self.leaders_data: Dict[str, List[Dict[str, Any]]] = {}
-        self.cookie: Optional[requests.cookies.RequestsCookieJar] = None
-        self.session: Optional[requests.Session] = None
+        self.leaders_data = {}
+        self.cookie = self.refresh_cookie()
+        self.session = requests.Session()
 
-    # -----------------------------
-    # Cookie / Session
-    # -----------------------------
-    def _ensure_session(self) -> requests.Session:
-        if self.session is None:
-            self.session = requests.Session()
-        return self.session
+    def refresh_cookie(self):
+        """Fetch a new cookie from the API."""
+        return requests.get(self.base_url + self.cookies_endpoint).cookies
 
-    def refresh_cookie(self) -> requests.cookies.RequestsCookieJar:
-        url = f"{self.base_url}{self.cookies_endpoint}"
-        resp = requests.get(url)
-        resp.raise_for_status()
-        self.cookie = resp.cookies
-        return self.cookie
+    def get_countries(self):
+        """Return a list of country codes from the API."""
+        resp = requests.get(self.base_url + self.country_endpoint, cookies=self.cookie)
+        return resp.json() if resp.status_code == 200 else []
 
-    # -----------------------------
-    # API Access
-    # -----------------------------
-    def get_countries(self) -> List[str]:
-        if self.cookie is None:
-            self.refresh_cookie()
-        url = f"{self.base_url}{self.country_endpoint}"
-        resp = requests.get(url, cookies=self.cookie)
-        if resp.status_code != 200:
-            self.refresh_cookie()
-            resp = requests.get(url, cookies=self.cookie)
-        resp.raise_for_status()
-        return resp.json()
-
-    def _get_leaders_raw(self, country: str) -> List[Dict[str, Any]]:
-        if self.cookie is None:
-            self.refresh_cookie()
-        url = f"{self.base_url}{self.leaders_endpoint}"
-        params = {"country": country}
-        resp = requests.get(url, cookies=self.cookie, params=params, timeout=20)
-
-        if resp.status_code != 200 or (resp.text and "cookie" in resp.text.lower()):
-            self.refresh_cookie()
-            resp = requests.get(url, cookies=self.cookie, params=params, timeout=20)
-
-        resp.raise_for_status()
-        return resp.json()
-
-    # -----------------------------
-    # Wikipedia helpers
-    # -----------------------------
-    @staticmethod
-    def _sanitize_text(raw: str) -> str:
-        text = raw
-        text = re.sub(r"\[[^\]]*\]", "", text)
-        text = re.sub(r"\((?:citation needed|clarification needed|who\?)\)", "", text, flags=re.IGNORECASE)
-        text = text.replace("\xa0", " ")
-        text = re.sub(r"\s+", " ", text).strip()
-        text = re.sub(r"\s+([,.;:])", r"\1", text)
-        return text
-
-    def get_first_paragraph(self, wikipedia_url: Optional[str]) -> Optional[str]:
-        if not wikipedia_url:
-            return None
-        s = self._ensure_session()
+    def get_first_paragraph(self, wikipedia_url: str) -> str:
+        """Extract and sanitize the first relevant paragraph from a Wikipedia page."""
         try:
-            resp = s.get(wikipedia_url, headers={'User-Agent': 'Mozilla/5.0'})
-            resp.raise_for_status()
-            html = resp.text
-            soup = BeautifulSoup(html, "html.parser")
+            resp = self.session.get(
+                wikipedia_url,
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=20,
+            )
+            if resp.status_code != 200:
+                time.sleep(1)
+                resp = self.session.get(
+                    wikipedia_url,
+                    headers={"User-Agent": "Mozilla/5.0"},
+                    timeout=20,
+                )
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            # Iterate through <p> tags and pick the first valid paragraph
             for p in soup.find_all("p"):
                 text = p.get_text(" ", strip=True)
-                if len(text) >= 60:
-                    return self._sanitize_text(text)
-            return None
+                if len(text) > 40 and not any(
+                    x in text.lower() for x in ["disambiguation", "refer to"]
+                ):
+                    return _sanitize_text(text)
         except Exception:
-            return None
+            pass
+        return None
 
-    # -----------------------------
-    # Enrichment
-    # -----------------------------
-    def enrich_country(
-        self,
-        country: str,
-        parallel: bool = True,
-        parallel_mode: str = "threads",
-        max_workers: int = 8,
-        show_progress: bool = True,
-    ) -> None:
-        leaders = self._get_leaders_raw(country)
+    def get_leaders(self, country: str):
+        """Fetch leaders for a given country and add their Wikipedia intros."""
+        try:
+            url = self.base_url + self.leaders_endpoint
+            resp = requests.get(url, cookies=self.cookie, params={"country": country})
 
-        def _fetch_enriched(leader: Dict[str, Any]) -> Dict[str, Any]:
-            wiki_url = leader.get("wikipedia_url")
-            leader = dict(leader)
-            leader["first_paragraph"] = self.get_first_paragraph(wiki_url) if wiki_url else None
-            return leader
+            # Handle expired cookie
+            if resp.status_code != 200:
+                self.cookie = self.refresh_cookie()
+                resp = requests.get(url, cookies=self.cookie, params={"country": country})
 
-        if not parallel or parallel_mode == "sequential":
-            it = leaders
-            if show_progress:
-                it = _tqdm(it, total=len(leaders), desc=f"{country}: enrich")
-            enriched = [_fetch_enriched(ld) for ld in it]
-        else:
-            Executor = ThreadPoolExecutor
-            if parallel_mode == "processes":
-                Executor = ProcessPoolExecutor
+            leaders = resp.json()
 
-            enriched = []
-            with Executor(max_workers=max_workers) as ex:
-                futures = {ex.submit(_fetch_enriched, ld): ld for ld in leaders}
-                iterator = as_completed(futures)
-                if show_progress:
-                    iterator = _tqdm(iterator, total=len(futures), desc=f"{country}: enrich")
-                for fut in iterator:
+            # Parallel fetching of Wikipedia intros
+            with ThreadPoolExecutor(max_workers=8) as ex:
+                futures = {
+                    ex.submit(
+                        self.get_first_paragraph, l.get("wikipedia_url")
+                    ): l for l in leaders if l.get("wikipedia_url")
+                }
+                for fut in _tqdm(as_completed(futures), total=len(futures), desc=f"{country}"):
+                    leader = futures[fut]
                     try:
-                        res = fut.result()
-                        enriched.append(res)
+                        leader["first_paragraph"] = fut.result()
                     except Exception:
-                        pass
+                        leader["first_paragraph"] = None
 
-        self.leaders_data[country] = enriched
+            self.leaders_data[country] = leaders
+        except Exception as e:
+            print(f"Error processing {country}: {e}")
 
-    def scrape_all(
-        self,
-        countries: Optional[List[str]] = None,
-        parallel: bool = True,
-        parallel_mode: str = "threads",
-        max_workers: int = 8,
-        show_progress: bool = True,
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        if countries is None:
-            countries = self.get_countries()
-
-        for c in _tqdm(countries, desc="Countries", total=len(countries)) if show_progress else countries:
-            try:
-                self.enrich_country(
-                    c,
-                    parallel=parallel,
-                    parallel_mode=parallel_mode,
-                    max_workers=max_workers,
-                    show_progress=show_progress,
-                )
-            except Exception:
-                continue
-
-        return self.leaders_data
-
-    # -----------------------------
-    # Exports
-    # -----------------------------
-    def to_json_file(self, filepath: str) -> None:
+    def to_json_file(self, filepath="leaders.json"):
+        """Save all collected data to a JSON file."""
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(self.leaders_data, f, ensure_ascii=False, indent=2)
 
-    def to_csv_file(self, filepath: str) -> None:
-        rows: List[Dict[str, Any]] = []
-        for country, leaders in self.leaders_data.items():
-            for leader in leaders:
-                row = {"country": country}
-                row.update(leader)
-                rows.append(row)
+    def to_csv_file(self, filepath="leaders.csv"):
+        """Save all collected data to a CSV file."""
+        import pandas as pd
+        rows = [
+            {"country": c, **l}
+            for c, leaders in self.leaders_data.items()
+            for l in leaders
+        ]
         pd.DataFrame(rows).to_csv(filepath, index=False, encoding="utf-8")
 
-    def save_all(self, json_path: str = "leaders.json", csv_path: str = "leaders.csv") -> None:
-        self.to_json_file(json_path)
-        self.to_csv_file(csv_path)
+    def run(self):
+        """Fetch leaders for all countries and save results."""
+        countries = self.get_countries()
+        for country in _tqdm(countries, desc="Fetching leaders"):
+            self.get_leaders(country)
+        self.to_json_file()
+        self.to_csv_file()
