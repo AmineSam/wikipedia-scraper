@@ -1,7 +1,7 @@
 # Wikipedia Scraper
 [![forthebadge made-with-python](https://ForTheBadge.com/images/badges/made-with-python.svg)](https://www.python.org/)
 
-A robust Python scraper to retrieve world leaders’ data via the Country-Leaders API and enrich it with Wikipedia introductions.
+A Python scraper to retrieve world leaders’ data via the Country-Leaders API and enrich it with Wikipedia introductions.
 
 
 ---
@@ -19,7 +19,7 @@ A robust Python scraper to retrieve world leaders’ data via the Country-Leader
 
 The project structure is designed for scalability, modularity, and clarity.
 
-![alt text](<images/ChatGPT Image Oct 30, 2025, 10_01_49 AM.png?>)
+![alt text](<images/description.png?>)
 ---
 
 ## Project Structure  
@@ -35,8 +35,9 @@ wikipedia-scraper/
 │       ├── __init__.py
 │       └── helpers.py             # Helper utilities (regex, tqdm wrappers)
 ├── images/
-│       ├── 
-│       └── 
+│       ├── description.png
+│       └── output1.png
+│       └── output2.png
 ├── leaders_data.json              # Output: Json leader data
 ├── leaders_data.csv               # Output: CSV version
 └── README.md
@@ -102,7 +103,7 @@ python main.py
       "wikipedia_url": "https://en.wikipedia.org/wiki/Abraham_Lincoln",
       "start_mandate": "1861-03-04",
       "end_mandate": "1865-04-15",
-      "first_paragraph": "Abraham Lincoln (February 12 1809 – April 15 1865) was the 16th president of the United States serving from 1861 until his assassination in 1865. He led the United States through the American Civil War defeating the Confederate States and playing a major role in the abolition of slavery."
+      "bio": "Abraham Lincoln (February 12 1809 – April 15 1865) was the 16th president of the United States serving from 1861 until his assassination in 1865. He led the United States through the American Civil War defeating the Confederate States and playing a major role in the abolition of slavery."
     }
   ]
 }
@@ -114,7 +115,7 @@ python main.py
 
 **Architecture**  
 - Class-based modular design (`WikipediaScraper` class)  
-- Clear folder separation (`src/`, `utils/`, `main.py`)  
+- Clear folder separation (`src/`, `utils/`,`images/`, `main.py`)  
 
 **Performance Enhancements**  
 - Parallel Wikipedia scraping with `ThreadPoolExecutor`  

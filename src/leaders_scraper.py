@@ -90,9 +90,9 @@ class WikipediaScraper:
                 for fut in _tqdm(as_completed(futures), total=len(futures), desc=f"{country}"):
                     leader = futures[fut]
                     try:
-                        leader["first_paragraph"] = fut.result()
+                        leader["bio"] = fut.result()
                     except Exception:
-                        leader["first_paragraph"] = None
+                        leader["bio"] = None
 
             self.leaders_data[country] = leaders
         except Exception as e:
@@ -107,10 +107,16 @@ class WikipediaScraper:
         """Save all collected data to a CSV file."""
         import pandas as pd
         rows = [
-            {"country": c, **l}
-            for c, leaders in self.leaders_data.items()
-            for l in leaders
-        ]
+                    {
+                        "country": c,
+                        **{
+                            ("bio" if k == "first_paragraph" else k): v
+                            for k, v in l.items()
+                        },
+                    }
+                    for c, leaders in self.leaders_data.items()
+                    for l in leaders
+                ]
         pd.DataFrame(rows).to_csv(filepath, index=False, encoding="utf-8")
 
     def run(self):
